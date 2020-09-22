@@ -1,0 +1,28 @@
+---
+platform: linux
+image_resource:
+  type: docker-image
+  source:
+    repository: powhapki/vault-role-id
+    tag: latest
+inputs:
+  - name: repo
+run:
+  path: sh
+  args:
+    - -c
+    - |
+      terraform -version
+      export VAULT_ADDR=${VAULT_END_POINT}
+
+      # ‼️Retrieve the AWS Secret‼️
+      echo "👇LEASE ID👇"
+      VAULT_TOKEN=${VAULT_KV_TOKEN} vault kv get -format=json kv/aws-keys-concourse
+
+      export TF_VAR_access_key=$(VAULT_TOKEN=${VAULT_KV_TOKEN} vault kv get -format=json kv/aws-keys-concourse | jq -r '.data.data.access_key')
+      export TF_VAR_secret_key=$(VAULT_TOKEN=${VAULT_KV_TOKEN} vault kv get -format=json kv/aws-keys-concourse | jq -r '.data.data.secret_key')
+
+      # ‼️terraform apply‼️
+      cd repo/tf
+      terraform init
+      terraform apply -auto-approve

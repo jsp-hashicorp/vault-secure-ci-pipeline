@@ -1,0 +1,100 @@
+---
+resource_types:
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+      tag: latest
+resources:
+- name: repo
+  type: git
+  icon: github
+  check_every: 10s
+  source:
+    uri: https://github.com/jsp-hashicorp/vault-secure-ci-pipeline.git
+    branch: master
+- name: notify
+  type: slack-notification
+  icon: slack
+  source:
+    url: https://hooks.slack.com/services/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
+- name: logs
+  type: slack-notification
+  icon: zip-disk
+  source:
+    url: https://hooks.slack.com/services/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
+- name: tf-state
+  type: slack-notification
+  icon: aws
+  source:
+    url: https://hooks.slack.com/services/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
+- name: put-secret-id
+  type: slack-notification
+  icon: key-variant
+  source:
+    url: https://hooks.slack.com/services/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
+- name: put-aws-keys
+  type: slack-notification
+  icon: key-variant
+  source:
+    url: https://hooks.slack.com/services/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
+
+jobs:
+- name: vault
+  plan:
+  - get: repo
+    trigger: true
+  - task: validate-vault-token
+    file: repo/ci/validate-vault-token.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_INIT_TOKEN: ((vault_init_token))
+      VAULT_REVOKE_TOKEN: ((vault_revoke_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - task: pull-secret-id
+    file: repo/ci/pull-secret-id.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_INIT_TOKEN: ((vault_init_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - put: put-secret-id
+- name: tf-build
+  plan:
+  - get: repo
+    trigger: true
+    passed: [ vault ]
+  - task: generate-aws-secrets
+    file: repo/ci/generate-aws-secrets.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_INIT_TOKEN: ((vault_init_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - task: tf-fmt-init-plan
+    file: repo/ci/tf-fmt-init-plan.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_INIT_TOKEN: ((vault_init_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - put: notify
+  - put: logs
+  - put: put-aws-keys
+- name: tf-apply
+  plan:
+  - get: repo
+    trigger: true
+    passed: [ tf-build ]
+  - task: tf-apply
+    file: repo/ci/tf-apply.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_INIT_TOKEN: ((vault_init_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - task: revoke-aws-key
+    file: repo/ci/revoke-aws-key.yml
+    params:
+      VAULT_END_POINT: ((vault_addr))
+      VAULT_REVOKE_TOKEN: ((vault_revoke_token))
+      VAULT_KV_TOKEN: ((vault_kv_token))
+  - put: notify
+  - put: logs
+  - put: tf-state
