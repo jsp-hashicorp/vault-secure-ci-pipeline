@@ -1,0 +1,3 @@
+ci/vars.yml
+vac/.terraform/*
+vac/terraform.tf*
